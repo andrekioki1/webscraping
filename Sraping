@@ -1,0 +1,50 @@
+import io
+import requests
+import PyPDF2
+import pandas as pd
+from Crypto.Cipher import AES
+
+# Combinação de todos os URLs de acordo com a formatação de data
+def dataspossiveis(ano, mes, dia, base):
+    saida = []
+    for a in ano:
+        for b in mes:
+            for c in dia:
+                for d in base:
+                    data = str(d)+str(a)+str(b)+str(c)
+                    saida.append(data)
+    return saida
+
+base = ['https://www.fenabrave.org.br/portal/files/']
+dia = ['2.pdf', '3.pdf']  # Opções possíveis
+mes = ['01_', '02_', '03_', '04_', '05_', '06_', '07_', '08_', '09_', '10_', '11_', '12_']
+ano = ['2023_','2022_','2021_']
+datacomp = dataspossiveis(ano, mes, dia, base)
+
+df1 = pd.DataFrame(datacomp)
+lista_url = df1.values.tolist()
+
+# Loop das URLs geradas pelo step anterior
+for url in lista_url:
+    url_base = url[0]
+    for dia_opcao in dia:
+        try:
+            # Tentando acessar a URL com a opção de dia atual
+            url_com_dia = url_base.replace('2.pdf', dia_opcao)
+            r = requests.get(url_com_dia)
+            r.raise_for_status()  # Verifica se houve algum erro ao fazer a requisição
+            f = io.BytesIO(r.content)
+
+            reader = PyPDF2.PdfReader(f)
+            contents = reader.pages[1].extract_text().split('\n')
+
+            df2 = pd.DataFrame(contents)
+            print(df2)
+            
+            break  # Se tudo correr bem, sai do loop
+        except Exception as e:
+            # Se houver um erro, continue para a próxima opção de dia
+            continue
+    else:
+        # Se todas as opções de dia falharem, ignore esta URL
+        continue

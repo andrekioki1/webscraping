@@ -2,7 +2,6 @@ import io
 import requests
 import PyPDF2
 import pandas as pd
-from Crypto.Cipher import AES
 
 # Combinação de todos os URLs de acordo com a formatação de data
 def dataspossiveis(ano, mes, dia, base):
@@ -18,11 +17,14 @@ def dataspossiveis(ano, mes, dia, base):
 base = ['https://www.fenabrave.org.br/portal/files/']
 dia = ['2.pdf', '3.pdf']  # Opções possíveis
 mes = ['01_', '02_', '03_', '04_', '05_', '06_', '07_', '08_', '09_', '10_', '11_', '12_']
-ano = ['2023_','2022_','2021_']
+ano = ['2023_','2022_']
 datacomp = dataspossiveis(ano, mes, dia, base)
 
 df1 = pd.DataFrame(datacomp)
 lista_url = df1.values.tolist()
+
+# Lista para armazenar os DataFrames resultantes
+dfs = []
 
 # Loop das URLs geradas pelo step anterior
 for url in lista_url:
@@ -36,15 +38,49 @@ for url in lista_url:
             f = io.BytesIO(r.content)
 
             reader = PyPDF2.PdfReader(f)
-            contents = reader.pages[1].extract_text().split('\n')
+            contents = reader.pages[5].extract_text().split('\n')
 
+            # Dividindo as linhas por espaço em branco e transformando em colunas
             df2 = pd.DataFrame(contents)
+            df2 = df2[0].str.split(expand=True)
+            
+            # Repetindo o valor da linha 2 antes de todas as linhas
+            valor_linha_2 = df2.iloc[7, 0]  # Valor da linha 2
+            
+            # Adicionando 'Mes/ano' como a primeira coluna do DataFrame
+            df2.insert(0, 'Mes/ano', valor_linha_2)
+            
+            # Refinamento dos dados de cada coluna
+            df2['Car_name'] = df2.apply(lambda row: row[1] + ' ' + row[2] + ' ' + row[3] + ' ' + row[4] if row[5] is not None else (row[1] + ' ' + row[2] + ' ' + row[3] if row[4] is not None else (row[1] + ' ' + row[2] if row[3] is not None else None)), axis=1)
+            df2[1] = df2.apply(lambda row: row['Car_name'] if row[3] is not None else row[1], axis=1)
+            df2[2] = df2.apply(lambda row: row[3] if row[3] is not None else row[2], axis=1)
+            df2[2] = df2.apply(lambda row: row[4] if row[4] is not None else row[2], axis=1)
+            df2[2] = df2.apply(lambda row: row[5] if row[5] is not None else row[2], axis=1)
+            df2[3] = pd.to_numeric(df2[3], errors='coerce')
+            df2.rename(columns={0: 'Ranking', 1: 'Modelo', 2: 'Vendas'}, inplace=True)
+            
+            # Removendo as linhas 0 a 8
+            df2 = df2.iloc[8:].drop(index=[58, 59, 60, 111])
+            
+            # Separando por virgula
+            #df2['Mes/ano,Ranking,Modelo,Vendas'] = df2.apply(lambda row: ','.join(row.dropna().tolist()), axis=1)
+            
+            # Descartando as outras colunas
+            df2.drop(columns=[3, 4, 5, 'Car_name'], inplace=True)
+            
+            dfs.append(df2)
             print(df2)
             
             break  # Se tudo correr bem, sai do loop
         except Exception as e:
-            # Se houver um erro, continue para a próxima opção de dia
+
             continue
     else:
-        # Se todas as opções de dia falharem, ignore esta URL
+
         continue
+
+# Concatenando todos os DataFrames em um único DataFrame
+df_final = pd.concat(dfs, ignore_index=True)
+
+# Exportando o DataFrame para um arquivo Excel
+df_final.to_excel('dados_fenabrave.xlsx', index=False)
